@@ -21,7 +21,7 @@ use constant READ_WAIT => 0.1; # 0.1sec
 
 use constant SOCKET_TIMEOUT => 5; # 5sec
 
-use constant CONNECTION_KEEPALIVE => 1800; # 30min
+use constant CONNECTION_KEEPALIVE_NO_EXPIRATION => -1;
 use constant CONNECTION_KEEPALIVE_MARGIN_MAX => 30; # max 30sec
 
 use constant RECONNECT_WAIT_MIN => 0.5;  # 0.5sec
@@ -31,7 +31,7 @@ use constant RECONNECT_WAIT_INCR_RATE => 1.5;
 use constant SEND_RETRY_MAX => 4;
 
 sub connection_keepalive_time {
-    CONNECTION_KEEPALIVE + int(CONNECTION_KEEPALIVE_MARGIN_MAX * 2 * rand()) - CONNECTION_KEEPALIVE_MARGIN_MAX;
+    $self->{keepalive_time} + int(CONNECTION_KEEPALIVE_MARGIN_MAX * 2 * rand()) - CONNECTION_KEEPALIVE_MARGIN_MAX;
 }
 
 sub new {
@@ -46,6 +46,7 @@ sub new {
         buffer_size => $configuration->{buffer_size},
         ping_message => $configuration->{ping_message},
         drain_log_tag => $configuration->{drain_log_tag},
+        keepalive_time => $configuration->{keepalive_time},
         output_format => $configuration->{output_format},
     };
 
@@ -109,15 +110,11 @@ sub execute {
         # succeed to connect. set keepalive disconnect time
         my $connecting = $secondary || $primary;
 
-        my $expired = time + connection_keepalive_time();
+        my $noexpire = $self->{keepalive_time} == CONNECTION_KEEPALIVE_NO_EXPIRATION;
+        my $expired = time + connection_keepalive_time() unless $noexpire;
         $reconnect_wait = RECONNECT_WAIT_MIN;
 
         while(not $check_reconnect->()) {
-            if (time > $expired) { # connection keepalive expired
-                infof "connection keepalive expired.";
-                last;
-            }
-
             # ping message (if enabled)
             my $ping_packed = undef;
             if ($self->{ping_message} and time >= $last_ping_message + $self->{ping_message}->{interval}) {
@@ -150,6 +147,12 @@ sub execute {
             my $written = $self->send($sock, $pending_packed);
             unless ($written) { # failed to write (socket error).
                 $disconnected_primary = 1 unless $secondary;
+                last;
+            }
+
+            # connection keepalive expired?
+            if (not $noexpire and time > $expired) {
+                infof "connection keepalive expired.";
                 last;
             }
 
