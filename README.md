@@ -96,6 +96,10 @@ Actual 'data' field of ping message is 'PING_DATA PATH\_OF\_INPUT\_FILE'.
 
 Tag name of drain\_log (messages count per drain/send to server), which is emitted to configured fluentd sever as fluentd message. Default is none (not to send drain\_log).
 
+### KEEPALIVE_TIME
+
+Connection keepalive time (Default: 1800 sec). Set -1 to keep a connection as long as possible. 
+
 ### LOG_PATH
 
 Log file path for 'fluent-agent-lite' (Default: /tmp/fluent-agent.log).
