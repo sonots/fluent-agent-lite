@@ -30,7 +30,7 @@ use constant RECONNECT_WAIT_MIN => 0.5;  # 0.5sec
 use constant RECONNECT_WAIT_MAX => 3600; # 60min
 use constant RECONNECT_WAIT_INCR_RATE => 1.5;
 
-use constant SEND_RETRY_MAX => 4;
+use constant SEND_RETRY_MAX_DEFAULT => 4;
 
 sub connection_keepalive_time {
     my ($keepalive_time) = @_;
@@ -50,6 +50,7 @@ sub new {
         ping_message => $configuration->{ping_message},
         drain_log_tag => $configuration->{drain_log_tag},
         keepalive_time => $configuration->{keepalive_time},
+        retry_max => $configuration->{retry_max},
         output_format => $configuration->{output_format},
     };
 
@@ -89,6 +90,7 @@ sub execute {
             $keepalive_time = CONNECTION_KEEPALIVE_MIN;
         }
     }
+    my $retry_max = (defined $self->{retry_max}) ? $self->{retry_max} : SEND_RETRY_MAX_DEFAULT;
 
     my $pending_packed;
     my $continuous_line;
@@ -161,7 +163,7 @@ sub execute {
                 }
             }
             # send
-            my $written = $self->send($sock, $pending_packed);
+            my $written = $self->send($sock, $pending_packed, $retry_max);
             unless ($written) { # failed to write (socket error).
                 $disconnected_primary = 1 unless $secondary;
                 last;
@@ -297,7 +299,7 @@ sub connect {
 }
 
 sub send {
-    my ($self,$sock,$data) = @_;
+    my ($self,$sock,$data,$retry_max) = @_;
     my $length = length($data);
     my $written = 0;
     my $retry = 0;
@@ -311,7 +313,7 @@ sub send {
                 $written += $wbytes;
             }
             else {
-                die "failed $retry times to send data: $!" if $retry > SEND_RETRY_MAX;
+                die "failed $retry times to send data: $!" if $retry > $retry_max;
                 $retry += 1;
             }
         }
