@@ -107,6 +107,34 @@ stop() {
     fi
     return $RETVAL
 }
+force_stop() {
+    echo -n $"Stopping $prog: "
+    touch $PID_FILE
+    if [ ! -w $PID_FILE ]; then
+        echo "Cannot touch pid file: "$PID_FILE
+        exit 1
+    fi
+    cat $PID_FILE | while read pid ; do
+        kill -s KILL $pid > /dev/null 2>&1
+    done
+    RETVAL=1
+    for (( retries = 0 ; retries < 10 ; retries++ )); do
+        running=$(cat $PID_FILE | while read p ; do if ps -p $p > /dev/null; then echo -n "1"; fi; done);
+        if [ "x"$running = "x" ]; then
+            RETVAL=0
+            break
+        fi
+        sleep 1
+    done
+
+    if [ $RETVAL = 0 ]; then
+        echo "ok."
+        rm -f $PID_FILE
+    else
+        echo "failed. (timeout after 10sec)"
+    fi
+    return $RETVAL
+}
 reload() {
     echo -n $"Reloading $prog: "
     cat $PID_FILE | while read pid ; do
@@ -264,17 +292,23 @@ case "$1" in
   stop)
         stop
         ;;
+  force_stop)
+        force_stop
+        ;;
   status)
         status
         ;;
   restart)
         stop && start
         ;;
+  force_restart)
+        force_stop && start
+        ;;
   reload)
         reload
         ;;
   *)
-        echo $"Usage: $prog {start|stop|restart|reload|status}"
+        echo $"Usage: $prog {start|stop|force_stop|restart|force_restart|reload|status}"
         exit 1
 esac
 
