@@ -147,7 +147,7 @@ sub execute {
         while(not $check_reconnect->()) {
             # connection keepalive expired
             if ($expiration_enable and time > $expired) {
-                infof "connection keepalive expired.";
+                # infof "connection keepalive expired.";
                 last;
             }
 
@@ -193,12 +193,16 @@ sub execute {
             $disconnected_primary = 0;
             $check_reconnect->(1); # clear SIGHUP signal
         }
-        infof "disconnecting to current server";
+        # infof "disconnecting to current server";
         if ($sock) {
             $sock->close;
             $sock = undef;
         }
-        infof "disconnected.";
+        if ($expiration_enable and time > $expired) {
+            infof "connection keepalive expired.";
+        } else {
+            infof "disconnected.";
+        }
     }
     if ($check_terminated->()) {
         warnf "SIGTERM received";
